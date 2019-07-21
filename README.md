@@ -1,0 +1,2 @@
+# MineInfoGan
+mine + infogan
