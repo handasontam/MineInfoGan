@@ -51,11 +51,11 @@ class MineConv(nn.Module):
     hidden_size (int, optional): size of the hidden layers
     """
 
-    def __init__(self, channels, img_size, code_size, ma_rate=0.1, hidden_size=100, ma_ef=1):
+    def __init__(self, channels, img_size, code_size, discrete_code_size, ma_rate=0.1, hidden_size=100, ma_ef=1):
         super(MineConv, self).__init__()
         self.ma_rate = ma_rate
         ds_size = img_size // 2 ** 4
-        self.XY_net = Net(input_size=128 * ds_size ** 2+code_size, 
+        self.XY_net = Net(input_size=128 * ds_size ** 2 + code_size + discrete_code_size, 
                           hidden_size=300)
 
         def discriminator_block(in_filters, out_filters, bn=True):
@@ -72,7 +72,7 @@ class MineConv(nn.Module):
         )
         self.ma_ef = ma_ef  # for moving average
 
-    def forward(self, img, code, img_marginal, code_marginal):
+    def forward(self, img, code, discrete_code, img_marginal, code_marginal, discrete_code_marginal):
         r"""Train the neural networks for one or more steps.
 
         Argument:
@@ -81,13 +81,15 @@ class MineConv(nn.Module):
 
         X = self.conv_blocks(img)
         X = X.view(X.shape[0], -1)
-        Y = code
-        batch_XY = torch.cat((X, Y), dim=1)
+        Y_1 = code
+        Y_2 = discrete_code
+        batch_XY = torch.cat((X, Y_1, Y_2), dim=1)
 
         X_ref = self.conv_blocks(img_marginal)
         X_ref = X.view(X_ref.shape[0], -1)
-        Y_ref = code_marginal
-        batch_XY_ref = torch.cat((X_ref, Y_ref), dim=1)
+        Y_ref_1 = code_marginal
+        Y_ref_2 = discrete_code_marginal
+        batch_XY_ref = torch.cat((X_ref, Y_ref_1, Y_ref_2), dim=1)
         
         # define the loss function with moving average in the gradient estimate
         mean_fXY = self.XY_net(batch_XY).mean()
@@ -104,8 +106,6 @@ class MineConv(nn.Module):
         """
         return {
             'XY_net': self.XY_net.state_dict(),
-            'X': self.X,
-            'Y': self.Y,
             'ma_rate': self.ma_rate,
             'ma_ef': self.ma_ef
         }
@@ -114,7 +114,5 @@ class MineConv(nn.Module):
         r"""Load the dictionary of state state_dict.
         """
         self.XY_net.load_state_dict(state_dict['XY_net'])
-        self.X = state_dict['X']
-        self.Y = state_dict['Y']
         self.ma_rate = state_dict['ma_rate']
         self.ma_ef = state_dict['ma_ef']

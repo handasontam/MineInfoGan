@@ -65,7 +65,7 @@ def to_categorical(y, num_columns):
 class Generator(nn.Module):
     def __init__(self):
         super(Generator, self).__init__()
-        input_dim = opt.latent_dim + opt.code_dim
+        input_dim = opt.latent_dim + opt.n_classes + opt.code_dim
 
         self.init_size = opt.img_size // 4  # Initial size before upsampling
         self.l1 = nn.Sequential(nn.Linear(input_dim, 128 * self.init_size ** 2))
@@ -84,8 +84,8 @@ class Generator(nn.Module):
             nn.Tanh(),
         )
 
-    def forward(self, noise, code):
-        gen_input = torch.cat((noise, code), -1)
+    def forward(self, noise, labels, code):
+        gen_input = torch.cat((noise, labels, code), -1)
         out = self.l1(gen_input)
         out = out.view(out.shape[0], 128, self.init_size, self.init_size)
         img = self.conv_blocks(out)
@@ -137,6 +137,7 @@ discriminator = Discriminator()
 mine_conv = MineConv(channels=opt.channels, 
                      img_size=opt.img_size, 
                      code_size=opt.code_dim, 
+                     discrete_code_size=opt.n_classes, 
                      ma_rate=ma_rate, 
                      ma_ef=ma_ef,
                      hidden_size=mine_hidden_size)
@@ -180,6 +181,9 @@ LongTensor = torch.cuda.LongTensor if cuda else torch.LongTensor
 
 # Static generator inputs for sampling
 static_z = Variable(FloatTensor(np.zeros((opt.n_classes ** 2, opt.latent_dim))))
+static_label = to_categorical(
+    np.array([num for _ in range(opt.n_classes) for num in range(opt.n_classes)]), num_columns=opt.n_classes
+)
 static_code = Variable(FloatTensor(np.zeros((opt.n_classes ** 2, opt.code_dim))))
 
 
@@ -187,7 +191,7 @@ def sample_image(n_row, batches_done):
     """Saves a grid of generated digits ranging from 0 to n_classes"""
     # Static sample
     z = Variable(FloatTensor(np.random.normal(0, 1, (n_row ** 2, opt.latent_dim))))
-    static_sample = generator(z, static_code)
+    static_sample = generator(z, static_label, static_code)
     save_image(static_sample.data, "images/static/%d.png" % batches_done, nrow=n_row, normalize=True)
 
     # Get varied c1 and c2
@@ -195,8 +199,8 @@ def sample_image(n_row, batches_done):
     c_varied = np.repeat(np.linspace(-1, 1, n_row)[:, np.newaxis], n_row, 0)
     c1 = Variable(FloatTensor(np.concatenate((c_varied, zeros), -1)))
     c2 = Variable(FloatTensor(np.concatenate((zeros, c_varied), -1)))
-    sample1 = generator(static_z, c1)
-    sample2 = generator(static_z, c2)
+    sample1 = generator(static_z, static_label, c1)
+    sample2 = generator(static_z, static_label, c2)
     save_image(sample1.data, "images/varying_c1/%d.png" % batches_done, nrow=n_row, normalize=True)
     save_image(sample2.data, "images/varying_c2/%d.png" % batches_done, nrow=n_row, normalize=True)
 
@@ -225,10 +229,11 @@ for epoch in range(opt.n_epochs):
 
         # Sample noise and labels as generator input
         z = Variable(FloatTensor(np.random.normal(0, 1, (batch_size, opt.latent_dim))))
+        label_input = to_categorical(np.random.randint(0, opt.n_classes, batch_size), num_columns=opt.n_classes)
         code_input = Variable(FloatTensor(np.random.uniform(-1, 1, (batch_size, opt.code_dim))))
 
         # Generate a batch of images
-        gen_imgs = generator(z, code_input)
+        gen_imgs = generator(z, label_input, code_input)
 
         # Loss measures generator's ability to fool the discriminator
         validity = discriminator(gen_imgs)
@@ -265,28 +270,38 @@ for epoch in range(opt.n_epochs):
 
         # Sample noise, labels and code as generator input
         z = Variable(FloatTensor(np.random.normal(0, 1, (batch_size, opt.latent_dim))))
+        # discrete c
+        sampled_labels = np.random.randint(0, opt.n_classes, batch_size)
+        batch_label_input = to_categorical(sampled_labels, num_columns=opt.n_classes)
         # c
         batch_code = Variable(FloatTensor(np.random.uniform(-1, 1, (batch_size, opt.code_dim))))
         # G(z, c)
-        batch_img = generator(z, code_input)
+        batch_img = generator(z, batch_label_input, batch_code)
 
         # shuffle c
         batch_code_marginal = Variable(FloatTensor(np.random.uniform(-1, 1, (batch_size, opt.code_dim))))
         # shuffle 
         batch_code_marginal_2 = Variable(FloatTensor(np.random.uniform(-1, 1, (batch_size, opt.code_dim))))
+        # shuffle discrete c
+        sampled_labels_marginal = np.random.randint(0, opt.n_classes, batch_size)
+        batch_label_input_marginal = to_categorical(sampled_labels_marginal, num_columns=opt.n_classes)
+        # shuffle discrete c
+        sampled_labels_marginal_2 = np.random.randint(0, opt.n_classes, batch_size)
+        batch_label_input_marginal_2 = to_categorical(sampled_labels_marginal_2, num_columns=opt.n_classes)
         # shuffle z
         z_marginal = Variable(FloatTensor(np.random.normal(0, 1, (batch_size, opt.latent_dim))))
         # G(z, c) marginal
-        batch_img_marginal = generator(z_marginal, batch_code_marginal_2) 
+        batch_img_marginal = generator(z_marginal, batch_label_input_marginal_2, batch_code_marginal_2) 
 
         batch_info_loss = mine_conv(img=batch_img, 
                                     code=batch_code, 
+                                    discrete_code=batch_label_input,
                                     img_marginal=batch_img_marginal, 
-                                    code_marginal=batch_code_marginal)
+                                    code_marginal=batch_code_marginal,
+                                    discrete_code_marginal=batch_label_input_marginal)
         batch_info_loss = lambda_con * batch_info_loss
         batch_info_loss.backward()
         optimizer_info.step()
-        optimizer_info.zero_grad()
 
 
         # --------------
