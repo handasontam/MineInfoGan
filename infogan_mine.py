@@ -18,7 +18,7 @@ import torch
 from mine_conv import MineConv
 ma_rate=0.1
 ma_ef=1
-mine_hidden_size = 100
+mine_hidden_size = 300
 
 
 

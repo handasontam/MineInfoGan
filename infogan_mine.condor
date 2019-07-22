@@ -1,0 +1,9 @@
+###### InfoGAN MINE Job ######
+executable    = /usr/bin/python3
+arguments     = infogan_mine.py --n_epochs=200 --batch_size 64 --lr 0.0002 --n_cpu 8 --latent_dim 62 --code_dim 2 
+output        = res/infogan_mine.out
+error         = $(output).err
+log           = res/infogan_mine.log
+priority      = 20
+
+queue
