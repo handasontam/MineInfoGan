@@ -21,7 +21,7 @@ def _div(net, data, ref):
 
 class Net(nn.Module):
     def __init__(self, input_size=2, hidden_size=100, sigma=0.02):
-        super().__init__()
+        super(Net, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
         self.fc3 = nn.Linear(hidden_size, 1)

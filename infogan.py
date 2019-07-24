@@ -8,6 +8,7 @@ import torchvision.transforms as transforms
 from torchvision.utils import save_image
 
 from torch.utils.data import DataLoader
+from torch.nn.utils import clip_grad_norm
 from torchvision import datasets
 from torch.autograd import Variable
 
@@ -29,7 +30,7 @@ os.makedirs("images/varying_c2/", exist_ok=True)
 parser = argparse.ArgumentParser()
 parser.add_argument("--n_epochs", type=int, default=200, help="number of epochs of training")
 parser.add_argument("--batch_size", type=int, default=64, help="size of the batches")
-parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
+parser.add_argument("--lr", type=float, default=0.0001, help="adam: learning rate")
 parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
 parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
 parser.add_argument("--n_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
@@ -47,9 +48,9 @@ cuda = True if torch.cuda.is_available() else False
 
 def weights_init_normal(m):
     classname = m.__class__.__name__
-    if classname.find("Conv") != -1:
+    if isinstance(m, nn.Conv2d):
         torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
-    elif classname.find("BatchNorm") != -1:
+    elif isinstance(m, nn.BatchNorm2d):
         torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
         torch.nn.init.constant_(m.bias.data, 0.0)
 
@@ -125,11 +126,9 @@ class Discriminator(nn.Module):
 
 # Loss functions
 adversarial_loss = torch.nn.MSELoss()
-categorical_loss = torch.nn.CrossEntropyLoss()
-continuous_loss = torch.nn.MSELoss()
 
 # Loss weights
-lambda_con = 0.1
+lambda_con = 1
 
 # Initialize generator and discriminator
 generator = Generator()
@@ -141,23 +140,26 @@ mine_conv = MineConv(channels=opt.channels,
                      ma_rate=ma_rate, 
                      ma_ef=ma_ef,
                      hidden_size=mine_hidden_size)
+# print(generator)
+# print(generator.weight)
+# print(mine_conv)
+# print(mine_conv.weight)
 
 if cuda:
     generator.cuda()
     discriminator.cuda()
     adversarial_loss.cuda()
-    categorical_loss.cuda()
-    continuous_loss.cuda()
 
 # Initialize weights
 generator.apply(weights_init_normal)
 discriminator.apply(weights_init_normal)
+mine_conv.apply(weights_init_normal)
 
 # Configure data loader
-os.makedirs("../../data/mnist", exist_ok=True)
+os.makedirs("data/mnist", exist_ok=True)
 dataloader = torch.utils.data.DataLoader(
     datasets.MNIST(
-        "../../data/mnist",
+        "data/mnist",
         train=True,
         download=True,
         transform=transforms.Compose(
@@ -240,6 +242,11 @@ for epoch in range(opt.n_epochs):
         g_loss = adversarial_loss(validity, valid)
 
         g_loss.backward()
+        total_generator_grad_norm = 0
+        for p in generator.parameters():
+            param_norm = p.grad.data.norm(2)
+            total_generator_grad_norm += param_norm.item() ** 2
+        total_generator_grad_norm = total_generator_grad_norm ** (1/2)
         optimizer_G.step()
 
         # ---------------------
@@ -301,6 +308,13 @@ for epoch in range(opt.n_epochs):
                                     discrete_code_marginal=batch_label_input_marginal)
         batch_info_loss = lambda_con * batch_info_loss
         batch_info_loss.backward()
+        total_information_grad_norm = 0
+        for p in generator.parameters():
+            param_norm = p.grad.data.norm(2)
+            total_information_grad_norm += param_norm.item() ** 2
+        total_information_grad_norm = total_information_grad_norm ** (1/2)
+       # adaptive gradient clipping
+        clip_grad_norm(generator.parameters(), min(total_generator_grad_norm, total_information_grad_norm))
         optimizer_info.step()
 
 
