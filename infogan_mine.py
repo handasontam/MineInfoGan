@@ -18,7 +18,7 @@ import torch
 from mine_conv import MineConv
 ma_rate=0.1
 ma_ef=1
-mine_hidden_size = 100
+mine_hidden_size = 300
 
 
 
@@ -154,10 +154,10 @@ generator.apply(weights_init_normal)
 discriminator.apply(weights_init_normal)
 
 # Configure data loader
-os.makedirs("../../data/mnist", exist_ok=True)
+os.makedirs("data/mnist", exist_ok=True)
 dataloader = torch.utils.data.DataLoader(
     datasets.MNIST(
-        "../../data/mnist",
+        "data/mnist",
         train=True,
         download=True,
         transform=transforms.Compose(
