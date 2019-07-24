@@ -120,12 +120,12 @@ class Discriminator(nn.Module):
     def forward(self, img):
         out = self.conv_blocks(img)
         out = out.view(out.shape[0], -1)
-        validity = self.adv_layer(out)
+        validity = torch.sigmoid(self.adv_layer(out))
         return validity
 
 
 # Loss functions
-adversarial_loss = torch.nn.MSELoss()
+adversarial_loss = torch.nn.BCELoss()
 
 # Loss weights
 lambda_con = 1
@@ -314,7 +314,7 @@ for epoch in range(opt.n_epochs):
             param_norm = p.grad.data.norm(2)
             total_information_grad_norm += param_norm.item() ** 2
         total_information_grad_norm = total_information_grad_norm ** (1/2)
-       # adaptive gradient clipping
+        # adaptive gradient clipping
         clip_grad_norm(generator.parameters(), min(total_generator_grad_norm, total_information_grad_norm))
         optimizer_info.step()
 
