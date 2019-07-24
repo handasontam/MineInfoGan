@@ -148,6 +148,7 @@ mine_conv = MineConv(channels=opt.channels,
 if cuda:
     generator.cuda()
     discriminator.cuda()
+    mine_conv.cuda()
     adversarial_loss.cuda()
 
 # Initialize weights
