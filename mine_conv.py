@@ -47,11 +47,11 @@ class MineConv(nn.Module):
     hidden_size (int, optional): size of the hidden layers
     """
 
-    def __init__(self, channels, img_size, code_size, discrete_code_size, ma_rate=0.1, hidden_size=100, ma_ef=1):
+    def __init__(self, channels, img_size, code_size, discrete_code_size, ma_rate=0.1, hidden_size=100, ma_ef=1, cat_embed_dimension=50):
         super(MineConv, self).__init__()
         self.ma_rate = ma_rate
         ds_size = img_size // 2 ** 4
-        self.XY_net = Net(input_size=128 * ds_size ** 2 + code_size + discrete_code_size, 
+        self.XY_net = Net(input_size=128 * ds_size ** 2 + code_size + cat_embed_dimension, 
                           hidden_size=300)
 
         def discriminator_block(in_filters, out_filters, bn=True):
@@ -66,6 +66,8 @@ class MineConv(nn.Module):
             *discriminator_block(32, 64),
             *discriminator_block(64, 128),
         )
+        self.emb_layer = nn.Linear(discrete_code_size, cat_embed_dimension, bias=False)
+        nn.init.normal_(self.emb_layer.weight, std=0.02)
         self.ma_ef = ma_ef  # for moving average
 
     def forward(self, img, code, discrete_code, img_marginal, code_marginal, discrete_code_marginal):
@@ -79,12 +81,14 @@ class MineConv(nn.Module):
         X = X.view(X.shape[0], -1)
         Y_1 = code
         Y_2 = discrete_code
+        Y_2 = self.emb_layer(Y_2)
         batch_XY = torch.cat((X, Y_1, Y_2), dim=1)
 
         X_ref = self.conv_blocks(img_marginal)
         X_ref = X.view(X_ref.shape[0], -1)
         Y_ref_1 = code_marginal
         Y_ref_2 = discrete_code_marginal
+        Y_ref_2 = self.emb_layer(Y_ref_2)
         batch_XY_ref = torch.cat((X_ref, Y_ref_1, Y_ref_2), dim=1)
         
         # define the loss function with moving average in the gradient estimate
