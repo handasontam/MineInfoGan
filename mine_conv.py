@@ -47,7 +47,7 @@ class MineConv(nn.Module):
     hidden_size (int, optional): size of the hidden layers
     """
 
-    def __init__(self, channels, img_size, code_size, discrete_code_size, ma_rate=0.1, hidden_size=100, ma_ef=1, cat_embed_dimension=50):
+    def __init__(self, channels, img_size, code_size, discrete_code_size, ma_rate=0.1, hidden_size=100, ma_ef=1, cat_embed_dimension=2):
         super(MineConv, self).__init__()
         self.ma_rate = ma_rate
         ds_size = img_size // 2 ** 4

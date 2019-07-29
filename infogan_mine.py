@@ -16,6 +16,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 
+import pandas as pd
+import matplotlib.pyplot as plt
+
 from mine_conv import MineConv
 ma_rate=0.1
 ma_ef=1
@@ -212,6 +215,8 @@ def sample_image(n_row, batches_done):
 #  Training
 # ----------
 
+results_df = pd.DataFrame(columns=['batch', 'D loss', 'G loss', 'MI loss'])
+
 for epoch in range(opt.n_epochs):
     for i, (imgs, _) in enumerate(dataloader):
 
@@ -324,9 +329,18 @@ for epoch in range(opt.n_epochs):
         # --------------
 
         print(
-            "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [info loss: %f]"
+            "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [MI loss: %f]"
             % (epoch, opt.n_epochs, i, len(dataloader), d_loss.item(), g_loss.item(), batch_info_loss.item())
         )
         batches_done = epoch * len(dataloader) + i
+        results_df.loc[batches_done] = [batches_done, d_loss.item(), g_loss.item(), batch_info_loss.item()]
         if batches_done % opt.sample_interval == 0:
             sample_image(n_row=10, batches_done=batches_done)
+
+results_df.to_csv('images/results.csv')
+lines = results_df.drop(['batch'], axis=1).plot.line()
+plt.savefig('images/all_loss.png')
+lines = results_df[['D loss', 'G loss']].plot.line()
+plt.savefig('images/gan_loss.png')
+lines = results_df[['MI loss)']].plot.line()
+plt.savefig('images/MI loss).png')
